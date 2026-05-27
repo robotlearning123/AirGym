@@ -104,7 +104,7 @@ class AvoidIsaacLab(DirectRLEnv):
         # Resolve {ENV_REGEX_NS} since the scene doesn't do this for ContactSensorCfg.prim_path
         env_regex_ns = self.scene.env_regex_ns
         contact_cfg = ContactSensorCfg(
-            prim_path=f"{env_regex_ns}/Robot/.*",
+            prim_path=f"{env_regex_ns}/Robot/Geometry/.*",
             history_length=3,
             track_air_time=True,
         )

@@ -18,6 +18,15 @@ from airgym.assets.x152b_isaaclab import X152B_CFG
 
 
 @configclass
+class MAPlanningSceneCfg(InteractiveSceneCfg):
+    """Scene configuration for the MAPlanning environment with multiple robots."""
+    robot_0: ArticulationCfg = X152B_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot_0")
+    robot_1: ArticulationCfg = X152B_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot_1")
+    robot_2: ArticulationCfg = X152B_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot_2")
+    robot_3: ArticulationCfg = X152B_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot_3")
+
+
+@configclass
 class MAPlanningIsaacLabCfg(DirectRLEnvCfg):
     """IsaacLab-compatible configuration for the Multi-Agent Planning environment."""
 
@@ -46,7 +55,7 @@ class MAPlanningIsaacLabCfg(DirectRLEnvCfg):
     target_state: list = None
 
     # Scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(
+    scene: MAPlanningSceneCfg = MAPlanningSceneCfg(
         num_envs=4, env_spacing=14.0, replicate_physics=True, clone_in_fabric=True
     )
 
@@ -64,7 +73,7 @@ class MAPlanningIsaacLabCfg(DirectRLEnvCfg):
         ),
     )
 
-    # Robot asset
+    # Robot asset (kept for backward compatibility; scene defines per-robot configs)
     robot: ArticulationCfg = X152B_CFG
 
     # Viewer camera
