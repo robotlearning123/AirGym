@@ -54,7 +54,6 @@ class MAPlanningIsaacLab(DirectRLEnv):
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.reset_robot = torch.zeros(self.num_envs, self.num_robots, device=self.device, dtype=torch.long)
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
-        self.progress_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.extras = {}
 
         self.cmd_thrusts = torch.zeros((self.num_envs, self.num_robots, 4), device=self.device)
@@ -332,7 +331,7 @@ class MAPlanningIsaacLab(DirectRLEnv):
 
         # Env reset
         reset_env = torch.any(reset_robot, dim=-1)
-        reset_env = torch.where(self.progress_buf >= self.max_episode_length - 1,
+        reset_env = torch.where(self.episode_length_buf >= self.max_episode_length - 1,
                                 torch.ones_like(self.reset_buf), reset_env)
 
         item_reward_info = {
@@ -353,7 +352,7 @@ class MAPlanningIsaacLab(DirectRLEnv):
 
     def _get_dones(self):
         terminated = self.reset_buf.bool()
-        time_outs = self.progress_buf >= self.max_episode_length - 1
+        time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 
     def _reset_idx(self, env_ids):

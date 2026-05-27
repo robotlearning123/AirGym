@@ -42,7 +42,6 @@ class CustomizedIsaacLab(DirectRLEnv):
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
-        self.progress_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.extras = {}
 
         self.cmd_thrusts = torch.zeros((self.num_envs, 4), device=self.device)
@@ -208,7 +207,7 @@ class CustomizedIsaacLab(DirectRLEnv):
         reward = torch.zeros(self.num_envs, device=self.device)
         ones = torch.ones_like(self.reset_buf)
         die = torch.zeros_like(self.reset_buf)
-        reset = torch.where(self.progress_buf >= self.max_episode_length - 1, ones, die)
+        reset = torch.where(self.episode_length_buf >= self.max_episode_length - 1, ones, die)
         item_reward_info = {}
         return reward, reset, item_reward_info
 
@@ -220,7 +219,7 @@ class CustomizedIsaacLab(DirectRLEnv):
 
     def _get_dones(self):
         terminated = self.reset_buf.bool()
-        time_outs = self.progress_buf >= self.max_episode_length - 1
+        time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 
     def _reset_idx(self, env_ids):

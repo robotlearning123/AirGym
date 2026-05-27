@@ -45,7 +45,6 @@ class AvoidIsaacLab(DirectRLEnv):
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
-        self.progress_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.extras = {}
 
         # Controller
@@ -317,7 +316,7 @@ class AvoidIsaacLab(DirectRLEnv):
         ones = torch.ones_like(self.reset_buf)
         die = torch.zeros_like(self.reset_buf)
 
-        reset = torch.where(self.progress_buf >= self.max_episode_length - 1, ones, die)
+        reset = torch.where(self.episode_length_buf >= self.max_episode_length - 1, ones, die)
         reset = torch.where(root_pos[..., 2] < 0.3, ones, reset)
         reset = torch.where(root_pos[..., 2] > 1.7, ones, reset)
         reset = torch.where(distance > 2.0, ones, reset)
@@ -348,7 +347,7 @@ class AvoidIsaacLab(DirectRLEnv):
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute done signals."""
         terminated = self.reset_buf.bool()
-        time_outs = self.progress_buf >= self.max_episode_length - 1
+        time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 
     def _reset_idx(self, env_ids: torch.Tensor):

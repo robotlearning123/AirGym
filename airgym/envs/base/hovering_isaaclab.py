@@ -42,7 +42,6 @@ class HoveringIsaacLab(DirectRLEnv):
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
-        self.progress_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.extras = {}
 
         # Controller
@@ -303,7 +302,7 @@ class HoveringIsaacLab(DirectRLEnv):
         ones = torch.ones_like(self.reset_buf)
         die = torch.zeros_like(self.reset_buf)
 
-        reset = torch.where(self.progress_buf >= self.max_episode_length - 1, ones, die)
+        reset = torch.where(self.episode_length_buf >= self.max_episode_length - 1, ones, die)
         reset = torch.where(torch.norm(relative_positions, dim=1) > 4, ones, reset)
         reset = torch.where(relative_positions[..., 2] < -2, ones, reset)
         reset = torch.where(relative_positions[..., 2] > 2, ones, reset)
@@ -365,7 +364,7 @@ class HoveringIsaacLab(DirectRLEnv):
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute done signals."""
         terminated = self.reset_buf.bool()
-        time_outs = self.progress_buf >= self.max_episode_length - 1
+        time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 
     def _reset_idx(self, env_ids: torch.Tensor):
