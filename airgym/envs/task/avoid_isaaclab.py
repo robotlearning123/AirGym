@@ -41,9 +41,10 @@ class AvoidIsaacLab(DirectRLEnv):
         self.num_actions = 5 if cfg.ctl_mode == "atti" else 4
 
         # Allocate buffers
-        self.obs_buf = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
+        self._obs_tensor = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._terminated_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.extras = {}
 
         # Controller
@@ -100,12 +101,15 @@ class AvoidIsaacLab(DirectRLEnv):
             self.scene.rigid_objects["obstacle"] = self._obstacle
 
         # Add contact sensor
+        # Resolve {ENV_REGEX_NS} since the scene doesn't do this for ContactSensorCfg.prim_path
+        env_regex_ns = self.scene.env_regex_ns
         contact_cfg = ContactSensorCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/.*",
+            prim_path=f"{env_regex_ns}/Robot/.*",
             history_length=3,
             track_air_time=True,
         )
         self._contact_sensor = ContactSensor(contact_cfg)
+        self.scene.sensors["contact_sensor"] = self._contact_sensor
 
         # Clone environments
         self.scene.clone_environments(copy_from_source=False)
@@ -220,13 +224,13 @@ class AvoidIsaacLab(DirectRLEnv):
         ang_vel_local = torch.einsum("bij,bj->bi", world_to_local, root_angvel)
 
         # Fill observation buffer
-        self.obs_buf[..., 0:3] = root_pos - self.target_states[..., 9:12]
-        self.obs_buf[..., 3:6] = euler_angles_local
-        self.obs_buf[..., 6:9] = vel_local
-        self.obs_buf[..., 9:12] = ang_vel_local
-        self.obs_buf[..., 12:16] = self.actions
+        self._obs_tensor[..., 0:3] = root_pos - self.target_states[..., 9:12]
+        self._obs_tensor[..., 3:6] = euler_angles_local
+        self._obs_tensor[..., 6:9] = vel_local
+        self._obs_tensor[..., 9:12] = ang_vel_local
+        self._obs_tensor[..., 12:16] = self.actions
 
-        return {"policy": self.obs_buf}
+        return {"policy": self._obs_tensor}
 
     def _quat_to_rot_matrix(self, quat_wxyz: torch.Tensor) -> torch.Tensor:
         """Convert quaternion (wxyz) to rotation matrix."""
@@ -259,7 +263,9 @@ class AvoidIsaacLab(DirectRLEnv):
 
     def _get_rewards(self) -> torch.Tensor:
         """Compute rewards."""
-        self.rew_buf[:], self.reset_buf[:], self.item_reward_info = self._compute_quadcopter_reward()
+        reward, terminated, self.item_reward_info = self._compute_quadcopter_reward()
+        self._terminated_buf[:] = terminated.bool()
+        self.rew_buf[:] = reward
         self.pre_actions = self.actions.clone()
         return self.rew_buf
 
@@ -312,11 +318,10 @@ class AvoidIsaacLab(DirectRLEnv):
         )
 
         # Reset conditions
-        ones = torch.ones_like(self.reset_buf)
-        die = torch.zeros_like(self.reset_buf)
+        ones = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
+        die = torch.zeros_like(ones)
 
-        reset = torch.where(self.episode_length_buf >= self.max_episode_length - 1, ones, die)
-        reset = torch.where(root_pos[..., 2] < 0.3, ones, reset)
+        reset = torch.where(root_pos[..., 2] < 0.3, ones, die)
         reset = torch.where(root_pos[..., 2] > 1.7, ones, reset)
         reset = torch.where(distance > 2.0, ones, reset)
         reset = torch.where(ups[..., 2] < 0.0, ones, reset)
@@ -345,7 +350,7 @@ class AvoidIsaacLab(DirectRLEnv):
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute done signals."""
-        terminated = self.reset_buf.bool()
+        terminated = self._terminated_buf.bool()
         time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 

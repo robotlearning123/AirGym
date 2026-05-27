@@ -39,7 +39,7 @@ class TrackingIsaacLab(DirectRLEnv):
         self.num_actions = 5 if cfg.ctl_mode == "atti" else 4
 
         # Allocate buffers
-        self.obs_buf = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
+        self._obs_tensor = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.extras = {}
@@ -79,6 +79,7 @@ class TrackingIsaacLab(DirectRLEnv):
         # Actions
         self.actions = torch.zeros((self.num_envs, self.num_actions), device=self.device)
         self.pre_actions = torch.zeros((self.num_envs, self.num_actions), device=self.device)
+        self._terminated_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
 
         # Get robot body indices
         self._body_id = self._robot.find_bodies("base_link")[0]
@@ -171,14 +172,14 @@ class TrackingIsaacLab(DirectRLEnv):
         root_quat_wxyz = root_quat[:, [3, 0, 1, 2]]
         rot_matrix = self._quat_to_rot_matrix(root_quat_wxyz)
 
-        self.obs_buf[..., 0:9] = rot_matrix.reshape(self.num_envs, 9)
-        self.obs_buf[..., 9:12] = root_pos
-        self.obs_buf[..., 12:15] = root_linvel
-        self.obs_buf[..., 15:18] = root_angvel
+        self._obs_tensor[..., 0:9] = rot_matrix.reshape(self.num_envs, 9)
+        self._obs_tensor[..., 9:12] = root_pos
+        self._obs_tensor[..., 12:15] = root_linvel
+        self._obs_tensor[..., 15:18] = root_angvel
 
-        self.obs_buf[..., 0:18] -= self.target_states
+        self._obs_tensor[..., 0:18] -= self.target_states
 
-        return {"policy": self.obs_buf}
+        return {"policy": self._obs_tensor}
 
     def _quat_to_rot_matrix(self, quat_wxyz: torch.Tensor) -> torch.Tensor:
         """Convert quaternion (wxyz) to rotation matrix."""
@@ -192,11 +193,12 @@ class TrackingIsaacLab(DirectRLEnv):
 
     def _get_rewards(self) -> torch.Tensor:
         """Compute rewards."""
-        self.rew_buf[:], self.reset_buf[:], self.item_reward_info = self._compute_tracking_reward()
+        reward, terminated, self.item_reward_info = self._compute_quadcopter_reward()
+        self._terminated_buf = terminated
         self.pre_actions = self.actions.clone()
-        return self.rew_buf
+        return reward
 
-    def _compute_tracking_reward(self):
+    def _compute_quadcopter_reward(self):
         """Compute tracking reward."""
         root_pos = self._robot.data.root_pos_w.torch
         root_quat = self._robot.data.root_quat_w.torch
@@ -248,11 +250,10 @@ class TrackingIsaacLab(DirectRLEnv):
                 + pos_reward * (vel_direction_reward + ups_reward + spin_reward)
             )
 
-        ones = torch.ones_like(self.reset_buf)
-        die = torch.zeros_like(self.reset_buf)
+        ones = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
+        die = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
 
-        reset = torch.where(self.episode_length_buf >= self.max_episode_length - 1, ones, die)
-        reset = torch.where(pos_diff > 4, ones, reset)
+        reset = torch.where(pos_diff > 4, ones, die)
         reset = torch.where(relative_positions[..., 2] < -2, ones, reset)
         reset = torch.where(relative_positions[..., 2] > 2, ones, reset)
         reset = torch.where(ups[..., 2] < 0.0, ones, reset)
@@ -281,7 +282,7 @@ class TrackingIsaacLab(DirectRLEnv):
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute done signals."""
-        terminated = self.reset_buf.bool()
+        terminated = self._terminated_buf.bool()
         time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 

@@ -5,9 +5,6 @@
 
 from __future__ import annotations
 
-import os
-from dataclasses import MISSING
-
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg
@@ -15,13 +12,9 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils.configclass import configclass
 
-from airgym import AIRGYM_ROOT_DIR
+from isaaclab.envs.common import ViewerCfg
 
-
-@configclass
-class HoveringSceneCfg(InteractiveSceneCfg):
-    """Scene configuration for the Hovering environment."""
-    pass
+from airgym.assets.x152b_isaaclab import X152B_CFG
 
 
 @configclass
@@ -37,6 +30,8 @@ class HoveringIsaacLabCfg(DirectRLEnvCfg):
     decimation: int = 1
     num_observations: int = 18
     num_actions: int = 4
+    observation_space: int = 18
+    action_space: int = 4
     get_privileged_obs: bool = True
     env_spacing: float = 1.0
     num_control_steps_per_env_step: int = 1
@@ -67,14 +62,12 @@ class HoveringIsaacLabCfg(DirectRLEnvCfg):
     )
 
     # Robot asset
-    robot: ArticulationCfg = MISSING
+    robot: ArticulationCfg = X152B_CFG
 
     # Viewer camera
-    viewer: dict = None
+    viewer: ViewerCfg = ViewerCfg(eye=(-5, -5, 4), lookat=(0, 0, 0))
 
     def __post_init__(self):
         super().__post_init__()
         if self.target_state is None:
             self.target_state = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        if self.viewer is None:
-            self.viewer = {"ref_env": 0, "pos": [-5, -5, 4], "lookat": [0, 0, 0]}

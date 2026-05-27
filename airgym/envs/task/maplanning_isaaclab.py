@@ -49,10 +49,11 @@ class MAPlanningIsaacLab(DirectRLEnv):
         self.num_robots = cfg.num_robots
 
         # Multi-agent buffers: (num_envs, num_robots, ...)
-        self.obs_buf = torch.zeros(self.num_envs, self.num_robots, cfg.num_observations, device=self.device, dtype=torch.float)
+        self._obs_tensor = torch.zeros(self.num_envs, self.num_robots, cfg.num_observations, device=self.device, dtype=torch.float)
         self.rew_buf = torch.zeros(self.num_envs, self.num_robots, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.reset_robot = torch.zeros(self.num_envs, self.num_robots, device=self.device, dtype=torch.long)
+        self._terminated_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.extras = {}
 
         self.cmd_thrusts = torch.zeros((self.num_envs, self.num_robots, 4), device=self.device)
@@ -123,14 +124,15 @@ class MAPlanningIsaacLab(DirectRLEnv):
 
         self.actions = torch.clamp(self.actions, self.action_lower_limits, self.action_upper_limits)
 
-        root_pos = self._robot.data.root_pos_w.torch
-        root_quat = self._robot.data.root_quat_w.torch
-        root_linvel = self._robot.data.root_lin_vel_w.torch
-        root_angvel = self._robot.data.root_ang_vel_w.torch
+        # Reshape from (num_envs * num_robots, ...) to (num_envs, num_robots, ...)
+        root_pos = self._robot.data.root_pos_w.torch.view(self.num_envs, self.num_robots, -1)
+        root_quat = self._robot.data.root_quat_w.torch.view(self.num_envs, self.num_robots, -1)
+        root_linvel = self._robot.data.root_lin_vel_w.torch.view(self.num_envs, self.num_robots, -1)
+        root_angvel = self._robot.data.root_ang_vel_w.torch.view(self.num_envs, self.num_robots, -1)
 
         # Process each robot
         for i in range(self.num_robots):
-            root_quat_wxyz = root_quat[:, [3, 0, 1, 2]]
+            root_quat_wxyz = root_quat[:, i, [3, 0, 1, 2]]
             actions_cpu = self.actions[:, i].cpu().numpy()
             root_pos_cpu = root_pos.cpu().numpy()
             root_quat_cpu = root_quat_wxyz.cpu().numpy()
@@ -170,10 +172,11 @@ class MAPlanningIsaacLab(DirectRLEnv):
             )
 
     def _get_observations(self) -> dict:
-        root_pos = self._robot.data.root_pos_w.torch
-        root_quat = self._robot.data.root_quat_w.torch
-        root_linvel = self._robot.data.root_lin_vel_w.torch
-        root_angvel = self._robot.data.root_ang_vel_w.torch
+        # Reshape from (num_envs * num_robots, ...) to (num_envs, num_robots, ...)
+        root_pos = self._robot.data.root_pos_w.torch.view(self.num_envs, self.num_robots, -1)
+        root_quat = self._robot.data.root_quat_w.torch.view(self.num_envs, self.num_robots, -1)
+        root_linvel = self._robot.data.root_lin_vel_w.torch.view(self.num_envs, self.num_robots, -1)
+        root_angvel = self._robot.data.root_ang_vel_w.torch.view(self.num_envs, self.num_robots, -1)
 
         forward_global = self.goal_positions - root_pos
 
@@ -202,25 +205,23 @@ class MAPlanningIsaacLab(DirectRLEnv):
         goal_dir = pos_diff_local / torch.norm(pos_diff_local, dim=-1, keepdim=True)
         self.related_dist = torch.norm(forward_global, dim=-1)
 
-        self.obs_buf[..., 0:3] = goal_dir
-        self.obs_buf[..., 3:6] = euler_angles_local
-        self.obs_buf[..., 6:9] = vel_local
-        self.obs_buf[..., 9:12] = ang_vel_local
-        self.obs_buf[..., 12:16] = self.actions
+        self._obs_tensor[..., 0:3] = goal_dir
+        self._obs_tensor[..., 3:6] = euler_angles_local
+        self._obs_tensor[..., 6:9] = vel_local
+        self._obs_tensor[..., 9:12] = ang_vel_local
+        self._obs_tensor[..., 12:16] = self.actions
 
         # Inter-agent observations
         for idx in range(self.num_robots):
             pos_x = root_pos[:, idx, 0:1]
             vel_x = root_linvel[:, idx, 0:1]
             for j in range(self.num_robots):
-                self.obs_buf[:, idx, 16+j*2:16+(j+1)*2-1] = root_pos[:, j, 0:1] - pos_x
-                self.obs_buf[:, idx, 16+(j+1)*2-1:16+(j+1)*2] = root_linvel[:, j, 0:1] - vel_x
+                self._obs_tensor[:, idx, 16+j*2:16+(j+1)*2-1] = root_pos[:, j, 0:1] - pos_x
+                self._obs_tensor[:, idx, 16+(j+1)*2-1:16+(j+1)*2] = root_linvel[:, j, 0:1] - vel_x
 
-        self.obs_buf[..., 16:] = 0
+        self._obs_tensor[..., 16:] = 0
 
-        # Flatten for return
-        flat_obs = self.obs_buf.reshape(-1, self.cfg.num_observations)
-        return {"policy": flat_obs}
+        return {"policy": self._obs_tensor}
 
     def _quat_to_rot_matrix_batch(self, quat_wxyz):
         w, x, y, z = quat_wxyz.unbind(-1)
@@ -228,7 +229,7 @@ class MAPlanningIsaacLab(DirectRLEnv):
             1 - 2*y*y - 2*z*z, 2*x*y - 2*w*z, 2*x*z + 2*w*y,
             2*x*y + 2*w*z, 1 - 2*x*x - 2*z*z, 2*y*z - 2*w*x,
             2*x*z - 2*w*y, 2*y*z + 2*w*x, 1 - 2*x*x - 2*y*y
-        ], dim=-1).reshape(-1, 3, 3)
+        ], dim=-1).reshape(*quat_wxyz.shape[:-1], 3, 3)
 
     def _matrix_to_euler_xyz_batch(self, rot_matrix: torch.Tensor) -> torch.Tensor:
         sy = torch.sqrt(rot_matrix[..., 0, 0] ** 2 + rot_matrix[..., 1, 0] ** 2)
@@ -257,9 +258,10 @@ class MAPlanningIsaacLab(DirectRLEnv):
         return a + b + c
 
     def _get_rewards(self) -> torch.Tensor:
-        self.rew_buf[:], self.reset_robot[:], self.reset_buf[:], self.item_reward_info = self._compute_reward()
+        self.rew_buf[:], self.reset_robot[:], terminated, self.item_reward_info = self._compute_reward()
+        self._terminated_buf[:] = terminated
         self.pre_actions = self.actions.clone()
-        self.pre_root_positions = self._robot.data.root_pos_w.torch.clone()
+        self.pre_root_positions = self._robot.data.root_pos_w.torch.view(self.num_envs, self.num_robots, -1).clone()
         self.prev_related_dist = self.related_dist.clone()
 
         # Flatten for return
@@ -267,8 +269,8 @@ class MAPlanningIsaacLab(DirectRLEnv):
         return flat_rew
 
     def _compute_reward(self):
-        root_pos = self._robot.data.root_pos_w.torch
-        root_quat = self._robot.data.root_quat_w.torch
+        root_pos = self._robot.data.root_pos_w.torch.view(self.num_envs, self.num_robots, -1)
+        root_quat = self._robot.data.root_quat_w.torch.view(self.num_envs, self.num_robots, -1)
 
         # Continuous action reward
         action_diff = self.actions - self.pre_actions
@@ -286,7 +288,8 @@ class MAPlanningIsaacLab(DirectRLEnv):
         heading_reward = torch.sum(forward_vec * heading_vec, dim=-1)
 
         # Speed reward
-        vel_local = torch.einsum("bnij,bnj->bni", self.world_to_local, self._robot.data.root_lin_vel_w.torch)
+        root_linvel = self._robot.data.root_lin_vel_w.torch.view(self.num_envs, self.num_robots, -1)
+        vel_local = torch.einsum("bnij,bnj->bni", self.world_to_local, root_linvel)
         speed_reward = -0.5 * (1 - torch.exp(-2 * torch.square(vel_local[..., 0] - 1.0)))
 
         # Height reward
@@ -330,8 +333,6 @@ class MAPlanningIsaacLab(DirectRLEnv):
 
         # Env reset
         reset_env = torch.any(reset_robot, dim=-1)
-        reset_env = torch.where(self.episode_length_buf >= self.max_episode_length - 1,
-                                torch.ones_like(self.reset_buf), reset_env)
 
         item_reward_info = {
             "continous_action_reward": continous_action_reward,
@@ -350,7 +351,7 @@ class MAPlanningIsaacLab(DirectRLEnv):
         return reward, reset_robot, reset_env, item_reward_info
 
     def _get_dones(self):
-        terminated = self.reset_buf.bool()
+        terminated = self._terminated_buf.bool()
         time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 
@@ -398,7 +399,8 @@ class MAPlanningIsaacLab(DirectRLEnv):
         self.pre_root_positions[env_ids] = 0
 
         # Initialize world_to_local
-        q_global = self._robot.data.root_quat_w.torch[env_ids][:, [3, 0, 1, 2]]
+        root_quat_all = self._robot.data.root_quat_w.torch.view(self.num_envs, self.num_robots, -1)
+        q_global = root_quat_all[env_ids][:, :, [3, 0, 1, 2]]
         rot_matrix_global = self._quat_to_rot_matrix_batch(q_global)
         yaw = torch.atan2(rot_matrix_global[..., 1, 0], rot_matrix_global[..., 0, 0])
         cos_yaw = torch.cos(yaw)

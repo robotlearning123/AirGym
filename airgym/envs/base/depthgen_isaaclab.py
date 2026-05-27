@@ -42,9 +42,10 @@ class DepthGenIsaacLab(DirectRLEnv):
         self.ctl_mode = cfg.ctl_mode
         self.num_actions = 5 if cfg.ctl_mode == "atti" else 4
 
-        self.obs_buf = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
+        self._obs_tensor = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._terminated_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.extras = {}
 
         self.cmd_thrusts = torch.zeros((self.num_envs, 4), device=self.device)
@@ -146,15 +147,15 @@ class DepthGenIsaacLab(DirectRLEnv):
         root_quat_wxyz = root_quat[:, [3, 0, 1, 2]]
         rot_matrix = self._quat_to_rot_matrix(root_quat_wxyz)
 
-        self.obs_buf[..., 0:9] = rot_matrix.reshape(self.num_envs, 9)
-        self.obs_buf[..., 9:12] = root_pos
-        self.obs_buf[..., 12:15] = root_linvel
-        self.obs_buf[..., 15:18] = root_angvel
+        self._obs_tensor[..., 0:9] = rot_matrix.reshape(self.num_envs, 9)
+        self._obs_tensor[..., 9:12] = root_pos
+        self._obs_tensor[..., 12:15] = root_linvel
+        self._obs_tensor[..., 15:18] = root_angvel
 
         self._add_noise()
-        self.obs_buf[..., 0:18] -= self.target_states
+        self._obs_tensor[..., 0:18] -= self.target_states
 
-        return {"policy": self.obs_buf}
+        return {"policy": self._obs_tensor}
 
     def _quat_to_rot_matrix(self, quat_wxyz):
         w, x, y, z = quat_wxyz.unbind(-1)
@@ -170,26 +171,25 @@ class DepthGenIsaacLab(DirectRLEnv):
         linvels_noise = 2e-2 * torch.randn(self.num_envs, 3, device=self.device)
         angvels_noise = 4e-1 * torch.randn(self.num_envs, 3, device=self.device)
 
-        self.obs_buf[..., 0:9] += matrix_noise
-        self.obs_buf[..., 9:12] += pos_noise
-        self.obs_buf[..., 12:15] += linvels_noise
-        self.obs_buf[..., 15:18] += angvels_noise
+        self._obs_tensor[..., 0:9] += matrix_noise
+        self._obs_tensor[..., 9:12] += pos_noise
+        self._obs_tensor[..., 12:15] += linvels_noise
+        self._obs_tensor[..., 15:18] += angvels_noise
 
     def _get_rewards(self) -> torch.Tensor:
-        self.rew_buf[:], self.reset_buf[:], self.item_reward_info = self._compute_reward()
+        self.rew_buf[:], terminated, self.item_reward_info = self._compute_reward()
+        self._terminated_buf = terminated
         self.pre_actions = self.actions.clone()
         return self.rew_buf
 
     def _compute_reward(self):
         reward = torch.zeros(self.num_envs, device=self.device)
-        ones = torch.ones_like(self.reset_buf)
-        die = torch.zeros_like(self.reset_buf)
-        reset = torch.where(self.episode_length_buf >= self.max_episode_length - 1, ones, die)
+        terminated = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         item_reward_info = {}
-        return reward, reset, item_reward_info
+        return reward, terminated, item_reward_info
 
     def _get_dones(self):
-        terminated = self.reset_buf.bool()
+        terminated = self._terminated_buf.bool()
         time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 

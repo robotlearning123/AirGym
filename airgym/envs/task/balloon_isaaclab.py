@@ -42,9 +42,10 @@ class BalloonIsaacLab(DirectRLEnv):
         self.ctl_mode = cfg.ctl_mode
         self.num_actions = 5 if cfg.ctl_mode == "atti" else 4
 
-        self.obs_buf = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
+        self._obs_tensor = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+        self._terminated_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.extras = {}
 
         self.cmd_thrusts = torch.zeros((self.num_envs, 4), device=self.device)
@@ -148,15 +149,15 @@ class BalloonIsaacLab(DirectRLEnv):
         root_quat_wxyz = root_quat[:, [3, 0, 1, 2]]
         rot_matrix = self._quat_to_rot_matrix(root_quat_wxyz)
 
-        self.obs_buf[..., 0:9] = rot_matrix.reshape(self.num_envs, 9)
-        self.obs_buf[..., 9:12] = root_pos
-        self.obs_buf[..., 12:15] = root_linvel
-        self.obs_buf[..., 15:18] = root_angvel
+        self._obs_tensor[..., 0:9] = rot_matrix.reshape(self.num_envs, 9)
+        self._obs_tensor[..., 9:12] = root_pos
+        self._obs_tensor[..., 12:15] = root_linvel
+        self._obs_tensor[..., 15:18] = root_angvel
 
         # Subtract balloon state (relative observations)
-        self.obs_buf[..., 9:12] -= self.balloon_positions
+        self._obs_tensor[..., 9:12] -= self.balloon_positions
 
-        return {"policy": self.obs_buf}
+        return {"policy": self._obs_tensor}
 
     def _quat_to_rot_matrix(self, quat_wxyz):
         w, x, y, z = quat_wxyz.unbind(-1)
@@ -193,7 +194,7 @@ class BalloonIsaacLab(DirectRLEnv):
         return a + b + c
 
     def _get_rewards(self) -> torch.Tensor:
-        self.rew_buf[:], self.reset_buf[:], self.item_reward_info = self._compute_balloon_reward()
+        self.rew_buf[:], self._terminated_buf[:], self.item_reward_info = self._compute_balloon_reward()
         self.pre_actions = self.actions.clone()
         self.pre_root_positions = self._robot.data.root_pos_w.torch.clone()
         return self.rew_buf
@@ -244,11 +245,10 @@ class BalloonIsaacLab(DirectRLEnv):
         )
 
         # Reset conditions
-        ones = torch.ones_like(self.reset_buf)
-        die = torch.zeros_like(self.reset_buf)
+        ones = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
+        die = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
 
-        reset = torch.where(self.episode_length_buf >= self.max_episode_length - 1, ones, die)
-        reset = torch.where(self.actions[..., -1] < -1, ones, reset)
+        reset = torch.where(self.actions[..., -1] < -1, ones, die)
         reset = torch.where(self.actions[..., -1] > 1, ones, reset)
         reset = torch.where(relative_positions[..., 0] < -0.2, ones, reset)
         reset = torch.where(root_linvel[..., 0] < 0, ones, reset)
@@ -270,7 +270,7 @@ class BalloonIsaacLab(DirectRLEnv):
         return reward, reset, item_reward_info
 
     def _get_dones(self):
-        terminated = self.reset_buf.bool()
+        terminated = self._terminated_buf.bool()
         time_outs = self.episode_length_buf >= self.max_episode_length - 1
         return terminated, time_outs
 
