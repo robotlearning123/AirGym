@@ -45,7 +45,6 @@ class BalloonIsaacLab(DirectRLEnv):
         self.obs_buf = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
-        self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.extras = {}
 
         self.cmd_thrusts = torch.zeros((self.num_envs, 4), device=self.device)

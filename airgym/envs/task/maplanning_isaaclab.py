@@ -53,7 +53,6 @@ class MAPlanningIsaacLab(DirectRLEnv):
         self.rew_buf = torch.zeros(self.num_envs, self.num_robots, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self.reset_robot = torch.zeros(self.num_envs, self.num_robots, device=self.device, dtype=torch.long)
-        self.time_out_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.extras = {}
 
         self.cmd_thrusts = torch.zeros((self.num_envs, self.num_robots, 4), device=self.device)
