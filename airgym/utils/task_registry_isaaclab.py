@@ -64,7 +64,18 @@ class TaskRegistryIsaacLab:
 
         if self.is_isaaclab_task(name):
             # IsaacLab environment
-            env = task_class(cfg=env_cfg, render_mode="human" if not args.headless else None)
+            headless = getattr(args, 'headless', True) if args is not None else True
+
+            # Update config from args
+            if args is not None:
+                num_envs = getattr(args, 'num_envs', None)
+                if num_envs is not None:
+                    env_cfg.scene.num_envs = num_envs
+                ctl_mode = getattr(args, 'ctl_mode', None)
+                if ctl_mode is not None:
+                    env_cfg.ctl_mode = ctl_mode
+
+            env = task_class(cfg=env_cfg, render_mode=None if headless else "human")
         else:
             # Old AirGym environment
             from airgym.utils.helpers import get_args, update_cfg_from_args, class_to_dict, parse_sim_params

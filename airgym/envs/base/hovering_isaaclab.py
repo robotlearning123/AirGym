@@ -242,6 +242,7 @@ class HoveringIsaacLab(DirectRLEnv):
 
         # Continuous action reward
         action_diff = self.actions - self.pre_actions
+        thrust_reward = torch.zeros(self.num_envs, device=self.device)
         if self.ctl_mode == "pos" or self.ctl_mode == 'vel' or self.ctl_mode == 'prop':
             continous_action_reward = 0.2 * torch.exp(-torch.norm(action_diff[..., :], dim=-1))
         else:

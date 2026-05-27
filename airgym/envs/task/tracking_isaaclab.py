@@ -226,6 +226,7 @@ class TrackingIsaacLab(DirectRLEnv):
         effort_reward = 0.1 * (1 - torch.clamp(self.cmd_thrusts, min=0.0, max=1.0).sum(-1) / 4)
 
         action_diff = self.actions - self.pre_actions
+        thrust_reward = torch.zeros(self.num_envs, device=self.device)
         if self.ctl_mode == "pos" or self.ctl_mode == 'vel' or self.ctl_mode == 'prop':
             continous_action_reward = 0.2 * torch.exp(-torch.norm(action_diff[..., :], dim=-1))
         else:

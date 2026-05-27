@@ -53,6 +53,14 @@ def main():
     print(f"Number of environments: {env.num_envs}")
     print(f"Device: {env.device}")
 
+    # Determine action shape
+    num_robots = getattr(env, 'num_robots', 1)
+    num_actions = env.num_actions
+    if num_robots > 1:
+        action_shape = (env.num_envs, num_robots, num_actions)
+    else:
+        action_shape = (env.num_envs, num_actions)
+
     # Run environment
     if args.train:
         # Training loop
@@ -61,7 +69,7 @@ def main():
 
         for step in range(1000000):
             # Random actions for testing
-            actions = torch.randn(env.num_envs, env.num_actions, device=env.device)
+            actions = torch.randn(action_shape, device=env.device)
             obs, rewards, terminated, truncated, infos = env.step(actions)
 
             if step % 100 == 0:
@@ -74,7 +82,7 @@ def main():
 
         for step in range(1000):
             # Random actions for testing
-            actions = torch.randn(env.num_envs, env.num_actions, device=env.device)
+            actions = torch.randn(action_shape, device=env.device)
             obs, rewards, terminated, truncated, infos = env.step(actions)
 
             if step % 100 == 0:
