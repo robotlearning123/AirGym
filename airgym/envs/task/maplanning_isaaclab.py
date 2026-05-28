@@ -77,24 +77,26 @@ class MAPlanningIsaacLab(DirectRLEnv):
         else:
             raise ValueError(f"Unknown control mode: {cfg.ctl_mode}")
 
-        # Initialize controllers for non-prop modes
+        # Initialize controllers for non-prop modes (one per robot for multi-agent)
         if self.ctl_mode != "prop":
             try:
                 from rlPx4Controller.pyParallelControl import (
                     ParallelPosControl, ParallelVelControl, ParallelAttiControl, ParallelRateControl
                 )
                 if self.ctl_mode == "pos":
-                    self.parallel_pos_control = ParallelPosControl(self.num_envs)
+                    self.parallel_pos_control = [ParallelPosControl(self.num_envs) for _ in range(self.num_robots)]
                 elif self.ctl_mode == "vel":
-                    self.parallel_vel_control = ParallelVelControl(self.num_envs)
+                    self.parallel_vel_control = [ParallelVelControl(self.num_envs) for _ in range(self.num_robots)]
                 elif self.ctl_mode == "atti":
-                    self.parallel_atti_control = ParallelAttiControl(self.num_envs)
+                    self.parallel_atti_control = [ParallelAttiControl(self.num_envs) for _ in range(self.num_robots)]
                 elif self.ctl_mode == "rate":
-                    self.parallel_rate_control = ParallelRateControl(self.num_envs)
+                    self.parallel_rate_control = [ParallelRateControl(self.num_envs) for _ in range(self.num_robots)]
             except ImportError:
                 print(f"[airgym] rlPx4Controller not available, falling back to 'prop' mode (was '{self.ctl_mode}')")
                 self.ctl_mode = "prop"
                 self.num_actions = 4
+                self.action_upper_limits = torch.tensor([1, 1, 1, 1], device=self.device, dtype=torch.float32)
+                self.action_lower_limits = torch.tensor([0, 0, 0, 0], device=self.device, dtype=torch.float32)
 
         self.forces = torch.zeros((self.num_envs, self.num_robots, 3), dtype=torch.float32, device=self.device)
         self.torques = torch.zeros((self.num_envs, self.num_robots, 3), dtype=torch.float32, device=self.device)

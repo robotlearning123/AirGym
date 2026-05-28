@@ -84,6 +84,8 @@ class TrackingIsaacLab(DirectRLEnv):
                 print(f"[airgym] rlPx4Controller not available, falling back to 'prop' mode (was '{self.ctl_mode}')")
                 self.ctl_mode = "prop"
                 self.num_actions = 4
+                self.action_upper_limits = torch.tensor([1, 1, 1, 1], device=self.device, dtype=torch.float32)
+                self.action_lower_limits = torch.tensor([0, 0, 0, 0], device=self.device, dtype=torch.float32)
 
         # Forces and torques
         self.forces = torch.zeros((self.num_envs, 1, 3), dtype=torch.float32, device=self.device)
