@@ -127,7 +127,7 @@ class MAPlanningIsaacLab(DirectRLEnv):
 
     def _stack_robot_data(self, attr_name: str) -> torch.Tensor:
         """Stack data from all robots into (num_envs, num_robots, ...) shape."""
-        return torch.stack([getattr(self._robots[i].data, attr_name) for i in range(self.num_robots)], dim=1)
+        return torch.stack([getattr(self._robots[i].data, attr_name).torch for i in range(self.num_robots)], dim=1)
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self.counter += 1
