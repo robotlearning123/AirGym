@@ -92,8 +92,9 @@ class TaskRegistryIsaacLab:
             np.random.seed(seed)
             torch.manual_seed(seed)
             os.environ['PYTHONHASHSEED'] = str(seed)
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(seed)
+                torch.cuda.manual_seed_all(seed)
 
             sim_params = {"sim": class_to_dict(env_cfg.sim)}
             try:

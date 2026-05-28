@@ -41,7 +41,8 @@ class AvoidIsaacLab(DirectRLEnv):
         self.num_actions = 5 if cfg.ctl_mode == "atti" else 4
 
         # Allocate buffers
-        self._obs_tensor = torch.zeros(self.num_envs, cfg.num_observations, device=self.device, dtype=torch.float)
+        obs_size = 12 + self.num_actions
+        self._obs_tensor = torch.zeros(self.num_envs, obs_size, device=self.device, dtype=torch.float)
         self.rew_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.float)
         self.reset_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
         self._terminated_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
@@ -228,7 +229,7 @@ class AvoidIsaacLab(DirectRLEnv):
         self._obs_tensor[..., 3:6] = euler_angles_local
         self._obs_tensor[..., 6:9] = vel_local
         self._obs_tensor[..., 9:12] = ang_vel_local
-        self._obs_tensor[..., 12:16] = self.actions
+        self._obs_tensor[..., 12:12+self.num_actions] = self.actions
 
         return {"policy": self._obs_tensor}
 

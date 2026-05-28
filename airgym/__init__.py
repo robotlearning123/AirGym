@@ -68,8 +68,8 @@ if ISAACLAB_AVAILABLE:
             return result
 
         wp.launch = _patched_launch
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[airgym] warp patch skipped: {e}")
 
     # Monkey-patch ArticulationView write methods to copy CUDA data/indices to CPU.
     # The PhysX tensor API in IsaacSim 6.0 has device_ordinal=-1 (CPU) even when
@@ -129,5 +129,5 @@ if ISAACLAB_AVAILABLE:
                 return wrapper
 
             setattr(ArticulationView, method_name, _make_wrapper(original_method))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[airgym] ArticulationView patch skipped: {e}")

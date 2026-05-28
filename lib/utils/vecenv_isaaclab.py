@@ -113,9 +113,8 @@ def register_isaaclab_envs():
             env_configurations.register(
                 task_name,
                 {
-                    'env_creator': lambda task_name=task_name, **kwargs: (
+                    'env_creator': lambda task_name=task_name, **kwargs: \
                         task_registry_isaaclab.make_env(task_name, args=None),
-                    ),
                     'vecenv_type': 'AirGym-RLGPU-IsaacLab'
                 }
             )

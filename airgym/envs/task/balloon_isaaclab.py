@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import torch
+import numpy as np
 import torch.nn.functional as F
 
 import isaaclab.sim as sim_utils

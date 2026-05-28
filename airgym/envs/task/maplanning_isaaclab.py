@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import torch
+import numpy as np
 import torch.nn.functional as F
 
 import isaaclab.sim as sim_utils
@@ -237,8 +238,6 @@ class MAPlanningIsaacLab(DirectRLEnv):
                 self._obs_tensor[:, idx, 16+j*2:16+(j+1)*2-1] = root_pos[:, j, 0:1] - pos_x
                 self._obs_tensor[:, idx, 16+(j+1)*2-1:16+(j+1)*2] = root_linvel[:, j, 0:1] - vel_x
 
-        self._obs_tensor[..., 16:] = 0
-
         return {"policy": self._obs_tensor}
 
     def _quat_to_rot_matrix_batch(self, quat_wxyz):
@@ -311,7 +310,7 @@ class MAPlanningIsaacLab(DirectRLEnv):
         speed_reward = -0.5 * (1 - torch.exp(-2 * torch.square(vel_local[..., 0] - 1.0)))
 
         # Height reward
-        z_reward = torch.min(torch.min(root_pos[..., 2] - (FLY_HEIGHT + 0.3), torch.tensor(0.0)),
+        z_reward = torch.min(torch.min(root_pos[..., 2] - (FLY_HEIGHT + 0.3), torch.zeros(1, device=self.device)),
                              (FLY_HEIGHT - 0.3) - root_pos[..., 2])
 
         # Uprightness reward
@@ -323,11 +322,11 @@ class MAPlanningIsaacLab(DirectRLEnv):
         esdf_reward = 0.5 * (1 - torch.exp(-0.5 * torch.square(self.esdf_dist))).squeeze(-1)
 
         # Collision reward
-        alive_reward = torch.where(self.esdf_dist > 0.3, torch.tensor(0.0), torch.tensor(-1.0)).squeeze(-1)
+        alive_reward = torch.where(self.esdf_dist > 0.3, torch.zeros(1, device=self.device), torch.tensor(-1.0, device=self.device)).squeeze(-1)
 
         # Reach goal
         reach_goal = self.related_dist < 0.3
-        reach_goal_reward = torch.where(reach_goal, torch.tensor(200.0), torch.tensor(0.0))
+        reach_goal_reward = torch.where(reach_goal, torch.tensor(200.0, device=self.device), torch.zeros(1, device=self.device))
 
         reward = (
             continous_action_reward
