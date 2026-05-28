@@ -18,6 +18,7 @@ setup(
         "ninja",
         'matplotlib',
         'torch>=2.0.0',
+        'gym>=0.23.1',
         'gymnasium>=0.29.0',
         'tensorboardX',
     ],

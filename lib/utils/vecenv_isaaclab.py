@@ -132,3 +132,7 @@ def register_isaaclab_envs():
         print("Registered IsaacLab environments with vecenv system")
     except ImportError as e:
         print(f"Could not register IsaacLab envs with vecenv: {e}")
+
+
+# Auto-register on import
+register_isaaclab_envs()
