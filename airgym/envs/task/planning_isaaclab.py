@@ -63,6 +63,25 @@ class PlanningIsaacLab(DirectRLEnv):
         else:
             raise ValueError(f"Unknown control mode: {cfg.ctl_mode}")
 
+        # Initialize controllers for non-prop modes
+        if self.ctl_mode != "prop":
+            try:
+                from rlPx4Controller.pyParallelControl import (
+                    ParallelPosControl, ParallelVelControl, ParallelAttiControl, ParallelRateControl
+                )
+                if self.ctl_mode == "pos":
+                    self.parallel_pos_control = ParallelPosControl(self.num_envs)
+                elif self.ctl_mode == "vel":
+                    self.parallel_vel_control = ParallelVelControl(self.num_envs)
+                elif self.ctl_mode == "atti":
+                    self.parallel_atti_control = ParallelAttiControl(self.num_envs)
+                elif self.ctl_mode == "rate":
+                    self.parallel_rate_control = ParallelRateControl(self.num_envs)
+            except ImportError:
+                print(f"[airgym] rlPx4Controller not available, falling back to 'prop' mode (was '{self.ctl_mode}')")
+                self.ctl_mode = "prop"
+                self.num_actions = 4
+
         self.forces = torch.zeros((self.num_envs, 1, 3), dtype=torch.float32, device=self.device)
         self.torques = torch.zeros((self.num_envs, 1, 3), dtype=torch.float32, device=self.device)
         self.thrusts = torch.zeros((self.num_envs, 4, 3), dtype=torch.float32, device=self.device)

@@ -70,6 +70,25 @@ class AvoidIsaacLab(DirectRLEnv):
         else:
             raise ValueError(f"Unknown control mode: {cfg.ctl_mode}")
 
+        # Initialize controllers for non-prop modes
+        if self.ctl_mode != "prop":
+            try:
+                from rlPx4Controller.pyParallelControl import (
+                    ParallelPosControl, ParallelVelControl, ParallelAttiControl, ParallelRateControl
+                )
+                if self.ctl_mode == "pos":
+                    self.parallel_pos_control = ParallelPosControl(self.num_envs)
+                elif self.ctl_mode == "vel":
+                    self.parallel_vel_control = ParallelVelControl(self.num_envs)
+                elif self.ctl_mode == "atti":
+                    self.parallel_atti_control = ParallelAttiControl(self.num_envs)
+                elif self.ctl_mode == "rate":
+                    self.parallel_rate_control = ParallelRateControl(self.num_envs)
+            except ImportError:
+                print(f"[airgym] rlPx4Controller not available, falling back to 'prop' mode (was '{self.ctl_mode}')")
+                self.ctl_mode = "prop"
+                self.num_actions = 4
+
         # Forces and torques
         self.forces = torch.zeros((self.num_envs, 1, 3), dtype=torch.float32, device=self.device)
         self.torques = torch.zeros((self.num_envs, 1, 3), dtype=torch.float32, device=self.device)
@@ -264,6 +283,11 @@ class AvoidIsaacLab(DirectRLEnv):
 
     def _get_rewards(self) -> torch.Tensor:
         """Compute rewards."""
+        # Update collision state from contact sensor
+        net_forces = self._contact_sensor.data.net_forces_w.torch
+        force_norm = torch.norm(net_forces.sum(dim=1), dim=-1)
+        self.collisions = torch.where(force_norm > 0.1, torch.ones_like(force_norm), torch.zeros_like(force_norm))
+
         reward, terminated, self.item_reward_info = self._compute_quadcopter_reward()
         self._terminated_buf[:] = terminated.bool()
         self.rew_buf[:] = reward

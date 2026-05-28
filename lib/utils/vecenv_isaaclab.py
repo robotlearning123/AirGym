@@ -5,6 +5,7 @@
 
 import numpy as np
 import torch
+from argparse import Namespace
 
 try:
     import gymnasium as gym
@@ -30,6 +31,8 @@ class ExtractObsWrapperIsaacLab(gym.Wrapper):
     def reset(self, **kwargs):
         if USE_GYMNASIUM:
             obs, info = super().reset(**kwargs)
+            if isinstance(obs, dict) and "policy" in obs:
+                obs = obs["policy"]
             return obs
         else:
             observations, _privileged_observations = super().reset(**kwargs)
@@ -38,6 +41,8 @@ class ExtractObsWrapperIsaacLab(gym.Wrapper):
     def step(self, action):
         if USE_GYMNASIUM:
             obs, rewards, terminated, truncated, infos = super().step(action)
+            if isinstance(obs, dict) and "policy" in obs:
+                obs = obs["policy"]
             dones = terminated | truncated
             return obs, rewards, dones, infos
         else:
@@ -114,7 +119,7 @@ def register_isaaclab_envs():
                 task_name,
                 {
                     'env_creator': lambda task_name=task_name, **kwargs: \
-                        task_registry_isaaclab.make_env(task_name, args=None),
+                        task_registry_isaaclab.make_env(task_name, args=Namespace(headless=True, ctl_mode='prop')),
                     'vecenv_type': 'AirGym-RLGPU-IsaacLab'
                 }
             )
